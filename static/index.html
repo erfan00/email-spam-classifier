@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Email Spam Classifier</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b0f14;
+    --panel: #121820;
+    --border: #253040;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #4f8cff;
+    --spam: #ff6b6b;
+    --ham: #41d68a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fa;
+      --panel: #ffffff;
+      --border: #d8dee4;
+      --text: #1b1f24;
+      --muted: #57606a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 2.5rem 1rem;
+  }
+  main {
+    width: 100%;
+    max-width: 720px;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin-bottom: 0.25rem;
+  }
+  p.subtitle {
+    color: var(--muted);
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+  textarea {
+    width: 100%;
+    min-height: 220px;
+    resize: vertical;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.95rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+    flex-wrap: wrap;
+  }
+  select, button {
+    font-size: 0.9rem;
+    padding: 0.5rem 0.85rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  #result {
+    margin-top: 1.25rem;
+    display: none;
+  }
+  #result.visible { display: block; }
+  .badge {
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .badge.spam { background: color-mix(in srgb, var(--spam) 25%, transparent); color: var(--spam); }
+  .badge.ham { background: color-mix(in srgb, var(--ham) 25%, transparent); color: var(--ham); }
+  .meter {
+    margin-top: 0.75rem;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--ham), var(--spam));
+  }
+  .meta {
+    margin-top: 0.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .error {
+    color: var(--spam);
+    margin-top: 1rem;
+    font-size: 0.9rem;
+  }
+  .examples {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .examples button {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--border);
+    font-weight: 500;
+    margin-right: 0.4rem;
+    margin-top: 0.4rem;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Email Spam Classifier</h1>
+  <p class="subtitle">
+    Paste an email below and classify it as spam or ham. Minimal static demo for the
+    <code>/predict</code> FastAPI endpoint.
+  </p>
+
+  <div class="panel">
+    <textarea id="emailText" placeholder="Paste email subject + body here..."></textarea>
+
+    <div class="examples">
+      Try:
+      <button type="button" data-example="spam">Spam example</button>
+      <button type="button" data-example="ham">Ham example</button>
+    </div>
+
+    <div class="controls">
+      <select id="modelSelect">
+        <option value="baseline">Baseline (TF-IDF + Logistic Regression)</option>
+        <option value="embedding">Embedding (MiniLM + Logistic Regression)</option>
+      </select>
+      <button id="classifyBtn" type="button">Classify</button>
+      <span id="status" class="meta"></span>
+    </div>
+
+    <div id="result">
+      <span id="badge" class="badge ham">ham</span>
+      <div class="meter"><div id="meterFill" class="meter-fill" style="width: 0%"></div></div>
+      <div class="meta" id="probText"></div>
+    </div>
+    <div id="errorBox" class="error"></div>
+  </div>
+</main>
+
+<script>
+  const SPAM_EXAMPLE = "Subject: WINNER!! You have been selected to receive a FREE $1000 Walmart Gift Card. Click here now to claim your prize before it expires!!! Act now, limited time offer, 100% guaranteed!";
+  const HAM_EXAMPLE = "Subject: Re: project sync tomorrow\n\nHey team, just confirming we're still on for the 10am sync tomorrow to review the Q3 roadmap. I'll send the doc tonight. Thanks!";
+
+  const textarea = document.getElementById("emailText");
+  const modelSelect = document.getElementById("modelSelect");
+  const classifyBtn = document.getElementById("classifyBtn");
+  const statusEl = document.getElementById("status");
+  const resultEl = document.getElementById("result");
+  const badgeEl = document.getElementById("badge");
+  const meterFillEl = document.getElementById("meterFill");
+  const probTextEl = document.getElementById("probText");
+  const errorBoxEl = document.getElementById("errorBox");
+
+  document.querySelectorAll(".examples button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      textarea.value = btn.dataset.example === "spam" ? SPAM_EXAMPLE : HAM_EXAMPLE;
+    });
+  });
+
+  async function classify() {
+    errorBoxEl.textContent = "";
+    resultEl.classList.remove("visible");
+    statusEl.textContent = "Classifying...";
+    classifyBtn.disabled = true;
+
+    try {
+      const response = await fetch("/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: textarea.value, model: modelSelect.value }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const pct = (data.spam_probability * 100).toFixed(1);
+
+      badgeEl.textContent = data.label;
+      badgeEl.className = `badge ${data.label}`;
+      meterFillEl.style.width = `${pct}%`;
+      probTextEl.textContent = `Spam probability: ${pct}% - model: ${data.model}`;
+      resultEl.classList.add("visible");
+      statusEl.textContent = "";
+    } catch (err) {
+      errorBoxEl.textContent = err.message;
+      statusEl.textContent = "";
+    } finally {
+      classifyBtn.disabled = false;
+    }
+  }
+
+  classifyBtn.addEventListener("click", classify);
+</script>
+</body>
+</html>

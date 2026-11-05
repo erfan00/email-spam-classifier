@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing / coverage / type-checking caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Dataset (downloaded/generated, not committed -- see README for provenance
+# and scripts/fetch_data.py + scripts/build_dataset.py to regenerate)
+data/raw/
+data/processed/
+
+# Trained model artifacts and metrics (regenerate via `python -m email_spam_classifier.train`)
+artifacts/*.joblib
+artifacts/metrics.json
+
+# sentence-transformers / HuggingFace local model cache, if downloaded into the repo
+.cache/
+sentence_transformers_cache/
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Env files that may contain secrets
+.env
+.env.*
